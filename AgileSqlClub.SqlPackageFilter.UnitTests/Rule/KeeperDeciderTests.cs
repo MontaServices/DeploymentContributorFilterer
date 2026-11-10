@@ -38,6 +38,51 @@ namespace AgileSqlClub.SqlPackageFilter.UnitTests
         }
 
         [Test]
+        public void Drop_Step_Is_Not_Removed_By_Keep_Rule_When_Object_Is_Recreated()
+        {
+            var keepRule = new Mock<FilterRule>();
+            keepRule.Setup(p => p.Operation()).Returns(FilterOperation.Keep);
+            keepRule.Setup(p => p.Matches(It.IsAny<ObjectIdentifier>(), It.IsAny<ModelTypeClass>(), It.IsAny<DeploymentStep>())).Returns(true);
+
+            var decider = new KeeperDecider(new List<FilterRule>() { keepRule.Object });
+            var result = decider.ShouldRemoveFromPlan(new ObjectIdentifier("dbo", "FK_a"), ModelSchema.ForeignKeyConstraint, StepType.Drop, isRecreated: true);
+
+            Assert.IsFalse(result);
+        }
+
+        [Test]
+        public void Drop_Step_Is_Removed_By_Ignore_Rule_When_Object_Is_Recreated()
+        {
+            var keepRule = new Mock<FilterRule>();
+            keepRule.Setup(p => p.Operation()).Returns(FilterOperation.Keep);
+            keepRule.Setup(p => p.Matches(It.IsAny<ObjectIdentifier>(), It.IsAny<ModelTypeClass>(), It.IsAny<DeploymentStep>())).Returns(true);
+
+            var ignoreRule = new Mock<FilterRule>();
+            ignoreRule.Setup(p => p.Operation()).Returns(FilterOperation.Ignore);
+            ignoreRule.Setup(p => p.Matches(It.IsAny<ObjectIdentifier>(), It.IsAny<ModelTypeClass>(), It.IsAny<DeploymentStep>())).Returns(true);
+
+            var decider = new KeeperDecider(new List<FilterRule>() { keepRule.Object, ignoreRule.Object });
+            var result = decider.ShouldRemoveFromPlan(new ObjectIdentifier("dbo", "FK_a"), ModelSchema.ForeignKeyConstraint, StepType.Drop, isRecreated: true);
+
+            Assert.IsTrue(result);
+        }
+
+        [Test]
+        public void Object_Key_Combines_Type_And_Name()
+        {
+            var key = DeploymentStepDecider.GetObjectKey(new ObjectIdentifier("dbo", "FK_a"), ModelSchema.ForeignKeyConstraint);
+
+            Assert.AreEqual("ForeignKeyConstraint:[dbo].[FK_a]", key);
+        }
+
+        [Test]
+        public void Object_Key_Is_Null_For_Unnamed_Object()
+        {
+            Assert.IsNull(DeploymentStepDecider.GetObjectKey(new ObjectIdentifier(), ModelSchema.DefaultConstraint));
+            Assert.IsNull(DeploymentStepDecider.GetObjectKey(null, ModelSchema.DefaultConstraint));
+        }
+
+        [Test]
         public void Create_Step_Does_Call_Ignore_Rule()
         {
             var ignoreRule = new Mock<FilterRule>();

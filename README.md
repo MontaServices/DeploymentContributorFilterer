@@ -35,6 +35,8 @@ There are two types of filters: **Keep** and **Ignore**.
 
 **Keep** filters stop objects being dropped when they are in the dacpac but not the destination, if they are in the dacpac and not in the destination *or are different* then they will be created or altered.
 
+When an object is changed by dropping and re-creating it (a foreign key whose definition changed, or constraints that are dropped and re-created around a table rebuild), the drop is left in the deployment: removing only the drop would leave a create that fails because the object already exists.
+
 Keep are really only ever used in combination with */p:DropObjectsInSource=True* otherwise they wouldn’t be dropped anyway.
 
 **Ignore** filters stop any sort of operation, create, alter or drop so there is some flexibility.

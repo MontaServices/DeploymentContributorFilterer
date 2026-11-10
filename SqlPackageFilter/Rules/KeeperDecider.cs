@@ -30,8 +30,14 @@ namespace AgileSqlClub.SqlPackageFilter.Rules
         /// <param name="objectType"></param>
         /// <param name="stepType"></param>
         /// <param name="step"></param>
+        /// <param name="logSink"></param>
+        /// <param name="isRecreated">
+        /// True when the plan also contains a Create step for the same object, i.e. the Drop is one half of a
+        /// drop/create pair. Keep rules protect objects from being dropped because they are missing from the source;
+        /// removing only the Drop of such a pair leaves a Create that fails because the object already exists.
+        /// </param>
         /// <returns></returns>
-        public bool ShouldRemoveFromPlan(ObjectIdentifier name, ModelTypeClass objectType, StepType stepType, DeploymentStep step = null, Action<string, DisplayMessageLevel> logSink = null)
+        public bool ShouldRemoveFromPlan(ObjectIdentifier name, ModelTypeClass objectType, StepType stepType, DeploymentStep step = null, Action<string, DisplayMessageLevel> logSink = null, bool isRecreated = false)
         {
 
             if (stepType == StepType.Other)
@@ -49,6 +55,12 @@ namespace AgileSqlClub.SqlPackageFilter.Rules
 
                 if (operation == FilterOperation.Keep && stepType == StepType.Drop && rule.Matches(name, objectType))
                 {
+                    if (isRecreated)
+                    {
+                        if (logSink != null) logSink($"Rule {rule.GetType().FullName} : Keep operation, Step is Drop, rule matches {name} {objectType} but the object is re-created later in the plan so the Drop is left in", DisplayMessageLevel.Debug);
+                        continue;
+                    }
+
                     if (logSink != null) logSink($"Rule {rule.GetType().FullName} : Keep operation, Step is Drop, rule matches {name} {objectType}", DisplayMessageLevel.Debug);
                     return true;
                 }

@@ -53,6 +53,9 @@ namespace AgileSqlClub.SqlPackageFilter.Filter
 
         var decider = new KeeperDecider(rules);
 
+        //collected up front, before any step is removed, a Drop precedes its matching Create in the plan
+        var createdObjects = DeploymentStepDecider.GetCreatedObjects(context.PlanHandle.Head);
+
         var next = context.PlanHandle.Head;
 
         while (next != null)
@@ -69,7 +72,7 @@ namespace AgileSqlClub.SqlPackageFilter.Filter
                 }
             }
 
-          var stepDecider = DeploymentStepDecider.Decide(current, decider, this.ShowMessage);
+          var stepDecider = DeploymentStepDecider.Decide(current, decider, this.ShowMessage, createdObjects);
           
           if (stepDecider != null)
           {

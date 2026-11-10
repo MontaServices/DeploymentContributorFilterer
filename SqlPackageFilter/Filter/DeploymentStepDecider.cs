@@ -11,10 +11,11 @@ namespace AgileSqlClub.SqlPackageFilter.Filter
 {
     public static class DeploymentStepDecider
     {
-        public static DeploymentStepDecision Decide(DeploymentStep step, KeeperDecider decider, Action<string, DisplayMessageLevel> logSink)
+        /// <param name="createdObjects">Keys (see <see cref="GetObjectKey"/>) of all objects that have a Create step somewhere in the plan.</param>
+        public static DeploymentStepDecision Decide(DeploymentStep step, KeeperDecider decider, Action<string, DisplayMessageLevel> logSink, ISet<string> createdObjects = null)
         {
             return RemoveCreateElement(step, decider, logSink) ??
-                   RemoveDropStep(step, decider, logSink) ??
+                   RemoveDropStep(step, decider, logSink, createdObjects) ??
                    RemoveAlterStep(step, decider, logSink) ??
                    RemoveDataLossCheckStep(step, decider, logSink)
                    ;
@@ -58,11 +59,45 @@ namespace AgileSqlClub.SqlPackageFilter.Filter
             };
         }
 
-        private static DeploymentStepDecision RemoveDropStep(DeploymentStep step, KeeperDecider decider, Action<string, DisplayMessageLevel> logSink)
+        /// <summary>
+        /// Collects the objects that are created by the plan, so a Drop step can tell whether it is part of a drop/create pair.
+        /// </summary>
+        public static ISet<string> GetCreatedObjects(DeploymentStep head)
+        {
+            var createdObjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (var step = head; step != null; step = step.Next)
+            {
+                if (!(step is CreateElementStep createStep)) continue;
+
+                var key = GetObjectKey(createStep.SourceElement?.Name, createStep.SourceElement?.ObjectType);
+                if (key != null)
+                {
+                    createdObjects.Add(key);
+                }
+            }
+
+            return createdObjects;
+        }
+
+        /// <summary>
+        /// Identifies an object by type and name, returns null for unnamed objects as these can't be matched between steps.
+        /// </summary>
+        public static string GetObjectKey(ObjectIdentifier name, ModelTypeClass objectType)
+        {
+            if (name == null || !name.HasName || objectType == null) return null;
+
+            return $"{objectType.Name}:{name}";
+        }
+
+        private static DeploymentStepDecision RemoveDropStep(DeploymentStep step, KeeperDecider decider, Action<string, DisplayMessageLevel> logSink, ISet<string> createdObjects)
         {
             if (step is DropElementStep dropStep)
             {
                 var targetElementName = dropStep.TargetElement?.Name;
+
+                var objectKey = GetObjectKey(targetElementName, dropStep.TargetElement?.ObjectType);
+                var isRecreated = objectKey != null && createdObjects != null && createdObjects.Contains(objectKey);
 
                 //special handling to detect unnamed check and default constraints... we need to create a dummy name for these with at least the same schema as the owning object
                 if ((dropStep.TargetElement?.ObjectType.Name == ModelSchema.CheckConstraint.Name) || (dropStep.TargetElement?.ObjectType.Name == ModelSchema.DefaultConstraint.Name))
@@ -78,7 +113,7 @@ namespace AgileSqlClub.SqlPackageFilter.Filter
                
                 return new DeploymentStepDecision()
                 {
-                    Remove = decider.ShouldRemoveFromPlan(targetElementName ?? new ObjectIdentifier(), dropStep.TargetElement?.ObjectType, StepType.Drop, null, logSink),
+                    Remove = decider.ShouldRemoveFromPlan(targetElementName ?? new ObjectIdentifier(), dropStep.TargetElement?.ObjectType, StepType.Drop, null, logSink, isRecreated),
                     StepType = StepType.Drop,
                     ObjectName = targetElementName?.ToString() ?? ""
                 };
